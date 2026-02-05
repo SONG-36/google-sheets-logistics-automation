@@ -200,7 +200,7 @@ Design Goal:
 
 Errors must be visible immediately after CSV paste.
 
-## 4. Key Design Decisions
+## 4 Key Design Decisions
 
 ### 4.1 Header-Based Extraction
 
@@ -238,7 +238,7 @@ System must operate at line-item level,
 
 No logic duplication across sheets.
 
-## 5. Update Mechanism
+## 5 Update Mechanism
 
 After user pastes new CSV into Import!A1:
 
@@ -250,7 +250,7 @@ After user pastes new CSV into Import!A1:
 
 No manual refresh required.
 
-## 6. Architectural Summary
+## 6 Architectural Summary
 
 This workbook is designed as a structured, rule-driven spreadsheet data model.
 
@@ -269,3 +269,128 @@ This ensures:
 - Zero manual workflow
 - Clear responsibility boundaries
 
+## 6 Sheet Column Definitions
+
+This section defines the exact column structure of each sheet before formula implementation.
+
+It serves as the structural blueprint of the data model.
+
+### 6.1 Import Sheet
+
+Purpose:
+
+Raw Shopify CSV input.
+
+Rules:
+
+- CSV must be pasted into `A1`
+- No helper columns allowed
+- No transformations inside this sheet
+- All references must be header-based in downstream sheets
+
+### 6.2 Settings Sheet
+
+| Cell | Purpose                 |
+| ---- | ----------------------- |
+| B1   | USD → EUR Exchange Rate |
+
+Example:
+
+| A                         | B    |
+| ------------------------- | ---- |
+| Exchange Rate (USD → EUR) | 0.92 |
+
+### 6.3 Mapping Sheet
+
+Columns:
+
+| Column | Name        | Description              |
+| ------ | ----------- | ------------------------ |
+| A      | Pattern     | Keyword or regex pattern |
+| B      | Match Field | SKU or Name              |
+| C      | Category    | Greenhouse or Accessory  |
+
+Notes:
+
+- Pattern matching supports regex
+- Rules evaluated top-down
+- No hardcoded classification logic allowed elsewhere
+
+### 6.4 General Sheet (Core Data Model)
+
+All rows represent line-items from Import.
+
+#### Column Structure
+
+| Column | Field Name            | Source                    | Type      | Description               |
+| ------ | --------------------- | ------------------------- | --------- | ------------------------- |
+| A      | Order Nr              | Import: Name              | Direct    | Order identifier          |
+| B      | Address               | Shipping fields           | Derived   | Combined shipping address |
+| C      | Product Name          | Import: Lineitem name     | Direct    | Original product name     |
+| D      | SKU                   | Import: Lineitem sku      | Direct    | Product SKU               |
+| E      | Category              | Mapping                   | Derived   | Greenhouse / Accessory    |
+| F      | Greenhouse Length (m) | Product Name              | Derived   | Extracted numeric length  |
+| G      | Qty                   | Import: Lineitem quantity | Direct    | Quantity                  |
+| H      | Pallet Size (mm)      | Manual / Future           | Manual    | Logistics data            |
+| I      | Pallet Weight (kg)    | Manual / Future           | Manual    | Logistics data            |
+| J      | Packages              | Manual / Future           | Manual    | Logistics data            |
+| K      | Price USD             | Import: Lineitem price    | Direct    | Unit price in USD         |
+| L      | Exchange Rate         | Settings!B1               | Reference | USD → EUR rate            |
+| M      | Price EUR             | Calculated                | Derived   | Price USD × Exchange Rate |
+| N      | Total EUR             | Calculated                | Derived   | Qty × Price EUR           |
+
+#### Design Notes
+
+- All Import fields must use header-based lookup
+- Address is constructed from:
+  - Shipping Name
+  - Shipping Street / Address1
+  - Shipping City
+  - Shipping Province
+  - Shipping Zip
+  - Shipping Country
+- Greenhouse Length extracted via regex from Product Name
+- Category determined exclusively via Mapping sheet
+
+### 6.5 Packing List Sheet
+
+Derived from General.
+
+#### Column Structure
+
+| Column | Field Name         |
+| ------ | ------------------ |
+| A      | Order Nr           |
+| B      | Address            |
+| C      | Product Name       |
+| D      | SKU                |
+| E      | Pallet Size (mm)   |
+| F      | Pallet Weight (kg) |
+| G      | Packages           |
+
+Additional Features:
+
+- Automatic total weight calculation
+- Automatic total package calculation
+- Header frozen
+- Filter enabled
+
+### 6.6 Invoice Sheet
+
+Aggregated summary based on General.
+
+#### Column Structure
+
+| Column | Field Name            | Description               |
+| ------ | --------------------- | ------------------------- |
+| A      | Ordered Greenhouse    | Unique greenhouse product |
+| B      | Total Qty             | Total ordered quantity    |
+| C      | Count of Bases        | Qty                       |
+| D      | Count of Extensions   | ((Length - 4) / 2) × Qty  |
+| E      | Amount of Accessories | Count of accessory items  |
+
+Rules:
+
+- No pivot tables
+- Use UNIQUE + aggregation functions
+- Include total row at bottom
